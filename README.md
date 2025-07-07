@@ -87,8 +87,11 @@ pip install -r requirements.txt
 ## 🔍 Пример вывода
 
 ```bash
-[LOG] Файл загружен: input.csv
-[LOG] Кластеризация завершена. Результат сохранён в result.csv
+[SLINK] Step 95: merging clusters 15 and 4 (distance = 14.8261)
+[SLINK] Step 96: merging clusters 51 and 15 (distance = 15.3309)
+[SLINK] Step 97: merging clusters 46 and 51 (distance = 15.7067)
+[SLINK] Step 98: merging clusters 76 and 46 (distance = 15.7242)
+[SLINK] Clustering complite. Clusters count: 2
 ```
 
 ---
