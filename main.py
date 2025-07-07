@@ -1,42 +1,28 @@
 import os
 import sys
 import csv
-import msvcrt
-from datetime import datetime
-from contextlib import contextmanager
-from pathlib import Path
+import ctypes
+import platform
+import subprocess
+from ctypes import Structure, c_double, c_int
 import numpy as np
 from PyQt5.QtWidgets import QApplication, QWidget, QVBoxLayout, QPushButton, QFileDialog, QLabel
 import matplotlib
-matplotlib.use("Qt5Agg")  
 import matplotlib.pyplot as plt
 from scipy.cluster.hierarchy import linkage, dendrogram
 
-from slink_interface import run_slink  
 
-
-@contextmanager
-def redirect_stdout_to_file(filename):
-    log_file = open(filename, "a", buffering=1)
-    fd = sys.stdout.fileno()
-    sys.stdout.flush()
-    saved_fd = os.dup(fd)
-    os.dup2(log_file.fileno(), fd)
-
-    try:
-        yield
-    finally:
-        sys.stdout.flush()
-        os.dup2(saved_fd, fd)
-        os.close(saved_fd)
-        log_file.close()
+class Point(Structure):
+    """Структура для C++"""
+    _fields_ = [("x", c_double), ("y", c_double)]
 
 class SLinkGUI(QWidget):
     def __init__(self):
         super().__init__()
+        matplotlib.use("Qt5Agg")
 
         self.setWindowTitle("Single-Linkage Clustering GUI")
-        self.setFixedSize(500, 300)
+        self.setFixedSize(500, 300)  # Фиксированный размер окна
 
         layout = QVBoxLayout()
         self.label = QLabel("Загрузите CSV-файл с точками")
@@ -52,17 +38,16 @@ class SLinkGUI(QWidget):
 
         self.setLayout(layout)
 
-        self.points = []
-        self.labels = []
+        self.points = []  # Для хранения загруженных точек
+        self.labels = []  # Кластерные метки
 
-        if not os.path.exists("result"):
-            os.makedirs("result")
+        self.dll = ctypes.CDLL("./slink.dll")
+        self.dll.slink.argtypes = [ctypes.POINTER(Point), c_int, ctypes.POINTER(c_int)]
 
     def load_csv(self):
+        """Функция загрузки .csv файла"""
         path, _ = QFileDialog.getOpenFileName(self, "Выбрать CSV файл", "", "CSV Files (*.csv)")
-        if not path:
-            return
-
+       
         # Чтение CSV
         points = []
         with open(path, newline='') as csvfile:
@@ -79,16 +64,15 @@ class SLinkGUI(QWidget):
         n = len(points)
         if n == 0:
             self.label.setText("Файл не содержит точек.")
+            log("Файл не содержит точек")
             return
 
-        points_np = np.array(points)
-
-        log_path = f"logs/log_{datetime.now().strftime('%Y%m%d_%H%M%S')}.txt"
-        if not os.path.exists("logs"):
-            os.makedirs("logs")
-
-        with redirect_stdout_to_file(log_path):
-            self.labels = run_slink(points_np)
+        c_points = (Point * n)(*[
+            Point(x, y) for x, y in points
+        ])
+        labels = (c_int * n)()
+        self.dll.slink(c_points, n, labels)
+        self.labels = list(labels)
 
         # Построение дендрограммы
         dist_matrix = self._calculate_distance_matrix(points)
@@ -116,7 +100,7 @@ class SLinkGUI(QWidget):
         if not self.points or not self.labels:
             self.label.setText("Сначала загрузите файл и выполните кластеризацию.")
             return
-
+        
         points = np.array(self.points)
         labels = np.array(self.labels)
         unique_labels = sorted(set(labels))
@@ -138,6 +122,7 @@ class SLinkGUI(QWidget):
         plt.grid(True)
         plt.tight_layout()
         plt.show()
+
 
 
 if __name__ == "__main__":
